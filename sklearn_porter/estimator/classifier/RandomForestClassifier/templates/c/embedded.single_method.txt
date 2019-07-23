@@ -1,14 +1,11 @@
-int {method_name}_{method_id}(float features[]) {{
+int {method_name}_{output_id}_{method_id}(float features[]) {{
     int classes[{n_classes}];
     {tree_branches}
-    int class_idx = 0;
-    int class_val = classes[0];
-    int i;
-    for (i = 1; i < {n_classes}; i++) {{
-        if (classes[i] > class_val) {{
-            class_idx = i;
-            class_val = classes[i];
-        }}
+	
+    int class_idx = 0,	class_val = classes[0];
+    
+    for (int i = 1; i < {n_classes}; i++) {{
+        if (classes[i] > class_val) {{ class_idx = i; class_val = classes[i]; }}
     }}
     return class_idx;
 }}

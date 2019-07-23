@@ -1,1 +1,1 @@
-classes[{method_name}(features)]++;
+int {method_name}(float features[]);

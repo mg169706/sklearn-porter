@@ -1,0 +1,9 @@
+#pragma once
+
+{method_headers}
+
+// function type
+typedef int(*FunctionCallback)(float[]);
+static FunctionCallback predictFunctions[] = {{
+	{method_func_pointers}
+}};

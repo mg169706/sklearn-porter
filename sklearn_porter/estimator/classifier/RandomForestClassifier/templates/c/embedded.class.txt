@@ -1,15 +1,42 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include "stdafx.h"
 #include <math.h>
+
+#include "headers.h"
 
 {method}
 
-int main(int argc, const char * argv[]) {{
-    float features[argc-1];
-    int i;
-    for (i = 1; i < argc; i++) {{
-        features[i-1] = atof(argv[i]);
-    }}
-    printf("%d", {method_name}(features));
-    return 0;
+int main(int argc, const char * argv[])
+{{
+	const unsigned int inputArraySize = {n_features};
+	const unsigned int outputArraySize = {n_outputs};
+
+	float features[inputArraySize];
+	int classifierResults[outputArraySize];
+
+	// Initialise the arrays to zero
+	memset(features, 0, inputArraySize * sizeof(*features));
+	memset(classifierResults, 0, outputArraySize * sizeof(*classifierResults));
+
+	// Check we're not receiving more input than the Classifier can handle
+	if(inputArraySize > argc-1) {{
+		printf("\nToo many input arguments. Expected a max of %d, but got %d. Quitting\n", inputArraySize, argc-1);
+		printf("\nPress ENTER to exit.\n");
+		exit(1);
+	}}
+	
+	for (int i = 1; i < argc; i++) {{
+		features[i-1] = atof(argv[i]);
+	}}
+
+	{method_name}(features, classifierResults, outputArraySize);
+	
+	for (int i = 0; i < outputArraySize; i++) {{
+		printf("%d", classifierResults[i]);
+	}}
+
+	printf("\nPress ENTER to exit.\n");
+	getchar();
+	return 0;
 }}
