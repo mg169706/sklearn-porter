@@ -30,7 +30,7 @@ class RandomForestClassifier(Classifier):
             'else':     '} else {',
             'endif':    '}',
             'arr':      'classes[{0}] = {1}',
-            'indent':   '',
+            'indent':   '    ',
             'join':     '; ',
         },
         'go': {
@@ -360,7 +360,7 @@ class RandomForestClassifier(Classifier):
         fn_names = []
         fn_pointers = []
         fns = []
-        compactCode = 1
+        compactCode = 0
         
         fns.append('#include "headers.h"\n\n')
         temp_method_calls = self.temp('embedded.method_calls', n_indents=2, skipping=True)
