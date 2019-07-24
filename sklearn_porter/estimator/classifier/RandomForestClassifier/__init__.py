@@ -5,9 +5,10 @@ import os
 from json import encoder
 from json import dumps
 
+from tkinter import messagebox
+
 from sklearn.tree.tree import DecisionTreeClassifier
 from sklearn_porter.estimator.classifier.Classifier import Classifier
-
 
 class RandomForestClassifier(Classifier):
     """
@@ -29,7 +30,7 @@ class RandomForestClassifier(Classifier):
             'else':     '} else {',
             'endif':    '}',
             'arr':      'classes[{0}] = {1}',
-            'indent':   '    ',
+            'indent':   '',
             'join':     '; ',
         },
         'go': {
@@ -104,6 +105,15 @@ class RandomForestClassifier(Classifier):
             raise ValueError(msg)
 
         self.estimator = estimator
+        
+        # Define the maximum nested code block depth
+        # This is a guide in the C spec, but most compilers set it as a rule
+        # C = 127
+        # C++ = 255
+        self.maxNestedDepth = 127
+        self.ignoreNestWarning = 0
+        
+        self.maxDepth = 0
 
     def export(self, class_name, method_name,
                export_data=False, export_dir='.', export_filename='data.json',
@@ -139,7 +149,8 @@ class RandomForestClassifier(Classifier):
                            in range(est.n_estimators)]
         self.n_estimators = len(self.estimators)
         self.n_features = est.estimators_[0].n_features_
-        self.n_classes = est.n_classes_
+        #self.n_classes = est.n_classes_
+        self.n_classes = 2
 
         if self.target_method == 'predict':
             # Exported:
@@ -208,7 +219,8 @@ class RandomForestClassifier(Classifier):
             fp.write(json_data)
 
     def create_branches(self, left_nodes, right_nodes, threshold,
-                        value, features, node, depth):
+                        value, features, node, depth, output_idx, 
+                        compact_code=1):
         """
         Parse and port a single tree estimator.
 
@@ -228,40 +240,78 @@ class RandomForestClassifier(Classifier):
             The current node.
         :param depth : int
             The tree depth.
-
+        :param output_idx : int
+            The output label index number
+        :param compact_code : int
+            If true (1), will remove code indenting and new lines resulting
+            in much small output file at the cost of readability.
+            
         Returns
         -------
         :return out : string
             The ported single tree as function or method.
         """
+        if depth > self.maxDepth:
+            self.maxDepth = depth
+        
         out = ''  # returned output
+        
+        # First check if we're too deep into nested code. Quit if we are.
+        # No point continuing the generate code we can't compile!
+        if self.target_language == 'c':
+            if depth > self.maxNestedDepth:
+                if self.ignoreNestWarning == 0:
+                    messagebox.showerror('Exceeded maximum nesting depth', 
+                                       'Code generation has exceeded the maximum C nesting depth of 127.'
+                                       '\nNot going any deeper. The generated code won\'t do what you expect.'
+                                       '\nFuture warnings on this will be ignored.')
+                    self.ignoreNestWarning = 1
+                return out
+        
         if threshold[node] != -2.:
-            out += '\n'
-            temp = self.temp('if', n_indents=depth)
+            temp = ''
+            
+            if compact_code == 1:
+                temp = self.temp('if')
+            else:
+                out += '\n'
+                temp = self.temp('if', n_indents=depth)
+            
             out += temp.format(features[node], '<=', self.repr(threshold[node]))
             if left_nodes[node] != -1.:
                 out += self.create_branches(
                     left_nodes, right_nodes, threshold, value,
-                    features, left_nodes[node], depth + 1)
-            out += '\n'
-            out += self.temp('else', n_indents=depth)
+                    features, left_nodes[node], depth + 1, output_idx, compact_code)
+
+            if compact_code == 1:
+                out += self.temp('else')
+            else:
+                out += '\n'
+                out += self.temp('else', n_indents=depth)
+            
             if right_nodes[node] != -1.:
                 out += self.create_branches(
                     left_nodes, right_nodes, threshold, value,
-                    features, right_nodes[node], depth + 1)
-            out += '\n'
-            out += self.temp('endif', n_indents=depth)
+                    features, right_nodes[node], depth + 1, output_idx, compact_code)
+                
+            if compact_code == 1:
+                out += self.temp('endif')
+            else:
+                out += '\n'
+                out += self.temp('endif', n_indents=depth)
+            
         else:
             clazzes = []
             temp_arr = self.temp('arr', n_indents=depth)
-            for i, rate in enumerate(value[node][0]):
+            for i, rate in enumerate(value[node][output_idx]):
                 clazz = temp_arr.format(i, int(rate))
-                clazz = '\n' + clazz
+                if compact_code == 0:
+                    clazz = '\n' + clazz
                 clazzes.append(clazz)
             out += self.temp('join').join(clazzes) + self.temp('join')
         return out
 
-    def create_single_method(self, estimator_index, estimator):
+    def create_single_method(self, estimator_index, estimator, output_idx, compactCode):
         """
         Port a method for a single tree.
 
@@ -271,7 +321,12 @@ class RandomForestClassifier(Classifier):
             The estimator index.
         :param estimator : RandomForestClassifier
             The estimator.
-
+        :param output_idx : int
+            The output label index number
+        :param compactCode : int
+            If true (1), will remove code indenting and new lines resulting
+            in much small output file at the cost of readability.
+            
         Returns
         -------
         :return : string
@@ -281,14 +336,17 @@ class RandomForestClassifier(Classifier):
 
         tree_branches = self.create_branches(
             estimator.tree_.children_left, estimator.tree_.children_right,
-            estimator.tree_.threshold, estimator.tree_.value, indices, 0, 1)
+            estimator.tree_.threshold, estimator.tree_.value, indices, 0, 1, output_idx, compactCode)
+
+        print(str(output_idx) + '_' + str(estimator_index) + ': Max branch depth:' + str(self.maxDepth))
 
         temp_single_method = self.temp('embedded.single_method')
         return temp_single_method.format(method_name=self.method_name,
+                                         output_id=output_idx,
                                          method_id=str(estimator_index),
                                          n_classes=self.n_classes,
                                          tree_branches=tree_branches)
-
+        
     def create_method_embedded(self):
         """
         Build the estimator methods or functions.
@@ -300,32 +358,63 @@ class RandomForestClassifier(Classifier):
         """
         # Generate method or function names:
         fn_names = []
-        temp_method_calls = self.temp('embedded.method_calls',
-                                      n_indents=2, skipping=True)
-        for idx, estimator in enumerate(self.estimators):
-            fn_name = self.method_name + '_' + str(idx)
-            fn_name = temp_method_calls.format(class_name=self.class_name,
-                                               method_name=fn_name)
-            fn_names.append(fn_name)
-        fn_names = '\n'.join(fn_names)
-        fn_names = self.indent(fn_names, n_indents=1, skipping=True)
-
-        # Generate related trees:
+        fn_pointers = []
         fns = []
-        for idx, estimator in enumerate(self.estimators):
-            tree = self.create_single_method(idx, estimator)
-            fns.append(tree)
+        compactCode = 1
+        
+        fns.append('#include "headers.h"\n\n')
+        temp_method_calls = self.temp('embedded.method_calls', n_indents=2, skipping=True)
+        temp_method_headers = self.temp('embedded.headers', n_indents=0, skipping=True)
+        
+        # Loop through each eastimator in each output label creating function headers and calls
+        for output_idx in range(0, self.estimators[0].n_outputs_):
+            for idx, estimator in enumerate(self.estimators):
+                fn_name = self.method_name + '_' + str(output_idx) + '_' + str(idx)
+                fn_pointers.append('&' + fn_name)
+                
+                fn_name = temp_method_calls.format(class_name=self.class_name, method_name=fn_name)
+                fn_names.append(fn_name)
+                
+            fn_pointers.append('nl')
+    
+            # Generate related trees:
+            for idx, estimator in enumerate(self.estimators):
+                tree = self.create_single_method(idx, estimator, output_idx, compactCode)
+                fns.append(tree)
+        
+        # Do some formatting on the names to make then look nice in C
+        fn_names = '\n'.join(fn_names)
+        fn_names = self.indent(fn_names, n_indents=0, skipping=True)
+        
+        fn_pointers = ', '.join(fn_pointers)
+        fn_pointers = fn_pointers.replace(' nl, ', '\n')
+        fn_pointers = fn_pointers.replace(', nl', '')
+        
+        # Swap the generated string into the template code
+        fn_name = temp_method_headers.format(class_name=self.class_name,
+                                             method_headers=fn_names,
+                                             method_func_pointers=fn_pointers)
+        
+        # Save the headers file at this point
+        hFile=open("headers.h","w")
+        hFile.write(fn_name)
+        hFile.close()
+        
         fns = '\n'.join(fns)
-
+        
+        # Save the trees file at this point
+        tFile=open("forest.c","w")
+        tFile.write(fns)
+        tFile.close()
+        
         # Merge generated content:
         n_indents = 1 if self.target_language in ['java', 'js',
                                                   'php', 'ruby'] else 0
+                                                  
         temp_method = self.temp('embedded.method')
         out = temp_method.format(class_name=self.class_name,
-                                 method_name=self.method_name,
-                                 method_calls=fn_names, methods=fns,
-                                 n_estimators=self.n_estimators,
-                                 n_classes=self.n_classes)
+                                method_name=self.method_name)
+        
         return self.indent(out, n_indents=n_indents, skipping=True)
 
     def create_class_embedded(self, method):
@@ -340,7 +429,9 @@ class RandomForestClassifier(Classifier):
         temp_class = self.temp('embedded.class')
         return temp_class.format(class_name=self.class_name,
                                  method_name=self.method_name,
-                                 method=method, n_features=self.n_features)
+                                 method=method,
+                                 n_features=self.n_features,
+                                 n_outputs=self.estimators[0].n_outputs_)
 
     def create_class(self):
         temp_class = self.temp('class')
