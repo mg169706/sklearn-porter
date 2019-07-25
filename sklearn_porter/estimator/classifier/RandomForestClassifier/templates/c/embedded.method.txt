@@ -2,7 +2,7 @@ void {method_name} (float* features, int results[], const int& outputArraySize) 
 	// Quit if either inout arrays are null
 	if ((results == NULL) || (features == NULL)) exit(1);
 
-	const unsigned int n_estimators = 10;
+	const unsigned int n_estimators = {n_estimators};
 
 	for (int j = 0; j < outputArraySize; j++) {{
 		// Run the decision trees and collect their output for later voting.
