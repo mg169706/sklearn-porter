@@ -360,7 +360,7 @@ class RandomForestClassifier(Classifier):
         fn_names = []
         fn_pointers = []
         fns = []
-        compactCode = 0
+        compactCode = 1
         
         fns.append('#include "headers.h"\n\n')
         temp_method_calls = self.temp('embedded.method_calls', n_indents=2, skipping=True)
@@ -413,7 +413,8 @@ class RandomForestClassifier(Classifier):
                                                   
         temp_method = self.temp('embedded.method')
         out = temp_method.format(class_name=self.class_name,
-                                method_name=self.method_name)
+                                method_name=self.method_name,
+                                n_estimators=self.estimator.n_estimators)
         
         return self.indent(out, n_indents=n_indents, skipping=True)
 
