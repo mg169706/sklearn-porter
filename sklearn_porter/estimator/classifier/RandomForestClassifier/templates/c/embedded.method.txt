@@ -9,7 +9,7 @@ void {method_name} (float* features, int results[], const int& outputArraySize) 
 		// Call the forest.
 		for (int k = 0; k < n_estimators; k++) {{
 			// Do a quick sanity check before accessing potentially dodgy memory
-			if ((j * n_estimators) + k >= sizeof(predictFunctions)) exit(1);
+			if ((j * n_estimators) + k >= sizeof(predictFunctions) / sizeof(predictFunctions[0])) exit(1);
 
 			// Sum the results as part of voting.
 			// This only works because we're only dealing with zeros of ones. If there were more classes this would need changing (Average or Count?)
